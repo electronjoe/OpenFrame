@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,6 +27,7 @@ import (
 
 const (
 	DefaultConfigPath = ".openframe/config.json"
+	MaxTileSize = 2048
 )
 
 // Config represents the JSON config structure.
@@ -38,122 +40,135 @@ type Config struct {
 		OffTime string `json:"offTime"`
 	} `json:"schedule"`
 	Interval  int `json:"interval"`  // Slideshow interval (seconds)
-	HdmiInput int `json:"hdmiInput"` // Not used in Phase 2, relevant for Phase 3 (CEC)
+	HdmiInput int `json:"hdmiInput"` // (used for potential CEC features, not shown here)
 }
 
 // Photo represents a single photo's metadata.
 type Photo struct {
 	FilePath  string
 	TakenTime time.Time
-	// Additional fields (latitude, longitude, etc.) can be added later
 }
 
-// SlideshowGame implements the ebiten.Game interface for the photo slideshow.
-// It only holds the photo metadata array plus a *single* loaded image at a time.
-type SlideshowGame struct {
-	photos       []Photo // All photo metadata (no in-memory decoded images)
-	currentIndex int
-	currentImage *ebiten.Image
+// TiledImage holds one large image that may be split into multiple sub-images
+// (tiles) if its dimensions exceed Ebiten's max texture size.
+type TiledImage struct {
+	tiles       []*ebiten.Image // each tile is <= MaxTileSize
+	totalWidth  int
+	totalHeight int
+}
 
-	switchTime  time.Time     // When to move to the next photo
-	interval    time.Duration // Interval between photos
-	dateOverlay bool
+// SlideshowGame implements the ebiten.Game interface.
+type SlideshowGame struct {
+	photos         []Photo
+	currentIndex   int          // which Photo index we're displaying
+	currentSlide   *TiledImage  // the loaded slide for the current Photo
+	switchTime     time.Time    // time when we'll move to the next photo
+	interval       time.Duration
+	dateOverlay    bool
+	loadingError   error        // if we hit an error loading a tile
 }
 
 // Update is called every tick (typically 60 times per second).
 func (g *SlideshowGame) Update() error {
-	// Check for Exit key
+	// Exit on ESC
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return fmt.Errorf("exit requested")
 	}
 
-	// Check if it's time to move to the next photo
+	// If it's time to switch to the next photo, do so
 	if time.Now().After(g.switchTime) {
-		g.currentIndex = (g.currentIndex + 1) % len(g.photos)
-		if err := g.loadCurrentImage(); err != nil {
-			log.Printf("Failed to load image: %v", err)
-		}
-		g.switchTime = time.Now().Add(g.interval)
+		g.advanceSlide()
 	}
+
 	return nil
 }
 
-// Draw renders the current photo and overlays (date, location, etc.).
+// Draw is called every frame to render the screen.
 func (g *SlideshowGame) Draw(screen *ebiten.Image) {
-	screen.Fill(color.RGBA{0, 0, 0, 255}) // Clear screen with black
+	// Clear screen to black
+	screen.Fill(color.RGBA{0, 0, 0, 255})
 
 	if len(g.photos) == 0 {
-		ebitenutil.DebugPrint(screen, "No photos to display.")
+		ebitenutil.DebugPrint(screen, "No photos found.")
 		return
 	}
 
-	if g.currentImage == nil {
-		ebitenutil.DebugPrint(screen, "Image not loaded.")
+	if g.loadingError != nil {
+		ebitenutil.DebugPrint(screen, "Error loading image:\n"+g.loadingError.Error())
 		return
 	}
 
-	// Calculate scaling to fit screen
+	if g.currentSlide == nil {
+		// If the slide is not yet loaded or is in the process of being loaded
+		ebitenutil.DebugPrint(screen, "Loading slide...")
+		return
+	}
+
+	// Draw the tiled image in a scaled, centered manner
 	sw, sh := screen.Size()
-	iw, ih := g.currentImage.Size()
+	scale := computeScale(g.currentSlide.totalWidth, g.currentSlide.totalHeight, sw, sh)
 
-	// Scale to fit, preserving aspect ratio
-	scale := min(float64(sw)/float64(iw), float64(sh)/float64(ih))
+	// We'll draw each tile in the correct position
+	// relative to the scaled & centered bounding box of the entire image.
+	totalW := float64(g.currentSlide.totalWidth) * scale
+	totalH := float64(g.currentSlide.totalHeight) * scale
+	offsetX := (float64(sw) - totalW) / 2
+	offsetY := (float64(sh) - totalH) / 2
 
-	// Center the image
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(-float64(iw)/2, -float64(ih)/2) // Move origin to center of image
-	op.GeoM.Scale(scale, scale)
-	op.GeoM.Translate(float64(sw)/2, float64(sh)/2) // Move image to the center of screen
+	// Each tile is originally placed at some sub-rectangle in the full image.
+	// We'll re-draw them with appropriate offsets.
+	maxSize := MaxTileSize
 
-	screen.DrawImage(g.currentImage, op)
+	tileIndex := 0
 
-	// If date overlay is enabled, draw the date/time in the bottom-left corner
+	for tileY := 0; tileY*maxSize < g.currentSlide.totalHeight; tileY++ {
+		for tileX := 0; tileX*maxSize < g.currentSlide.totalWidth; tileX++ {
+			// The tile's top-left corner in original (unscaled) coords
+			subX := tileX * maxSize
+			subY := tileY * maxSize
+
+			// Create a draw operation
+			op := &ebiten.DrawImageOptions{}
+			// Move origin so (0,0) is center of the sub-tile
+			op.GeoM.Translate(-float64(maxSize)/2, -float64(maxSize)/2)
+			// Scale
+			op.GeoM.Scale(scale, scale)
+			// Then shift so the sub-tile is placed at the correct position within the full image
+			// plus offset to center the full image on screen
+			op.GeoM.Translate(
+				offsetX+float64(subX)*scale+float64(maxSize)*scale/2,
+				offsetY+float64(subY)*scale+float64(maxSize)*scale/2,
+			)
+
+			tile := g.currentSlide.tiles[tileIndex]
+			screen.DrawImage(tile, op)
+			tileIndex++
+		}
+	}
+
+	// If dateOverlay is enabled, draw photo timestamp in bottom-left
 	if g.dateOverlay {
-		taken := g.photos[g.currentIndex].TakenTime
-		dateStr := taken.Format("2006-01-02 15:04:05") // e.g., 2023-12-31 15:04:05
 		face := basicfont.Face7x13
+		curPhoto := g.photos[g.currentIndex]
+		dateStr := curPhoto.TakenTime.Format("2006-01-02 15:04:05")
 		text.Draw(screen, dateStr, face, 20, sh-20, color.White)
 	}
 }
 
-// Layout returns the game’s logical screen size; Ebiten will scale it to the actual window.
-func (g *SlideshowGame) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	// A common choice: 1920x1080 for a TV
+// Layout is Ebiten’s required method to specify the game’s “logical” screen size.
+func (g *SlideshowGame) Layout(outsideWidth, outsideHeight int) (int, int) {
+	// Common choice for 1080p
 	return 1920, 1080
 }
 
-// loadCurrentImage loads (or reloads) the image for the currentIndex photo.
-func (g *SlideshowGame) loadCurrentImage() error {
-	// If we already have an image loaded, we can let it go (for GC).
-	// (Ebiten Images are cleaned up when dereferenced; there's no explicit Dispose method.)
-	g.currentImage = nil
-
-	photo := g.photos[g.currentIndex]
-	file, err := os.Open(photo.FilePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return err
-	}
-
-	g.currentImage = ebiten.NewImageFromImage(img)
-	return nil
-}
-
-// -------------------- Main entry point -------------------- //
+// -------------------- Main Entry -------------------- //
 
 func main() {
-	// 1. Read config
 	cfg, err := readConfig()
 	if err != nil {
 		log.Fatalf("Failed to read config: %v", err)
 	}
 
-	// 2. Load and index photo metadata (paths + times)
 	photos, err := loadPhotos(cfg)
 	if err != nil {
 		log.Fatalf("Failed to load photos: %v", err)
@@ -163,86 +178,127 @@ func main() {
 		return
 	}
 
-	// 3. Sort photos by TakenTime ascending
+	// Sort by date/time ascending
 	sort.Slice(photos, func(i, j int) bool {
 		return photos[i].TakenTime.Before(photos[j].TakenTime)
 	})
 
-	// 4. Create the slideshow game struct (just metadata + first image loaded)
-	interval := time.Duration(cfg.Interval) * time.Second
+	// Create our game struct
 	game := &SlideshowGame{
 		photos:      photos,
-		interval:    interval,
+		interval:    time.Duration(cfg.Interval) * time.Second,
+		switchTime:  time.Now().Add(time.Duration(cfg.Interval) * time.Second),
 		dateOverlay: cfg.DateOverlay,
 	}
-	// Manually load the first photo right away
-	if err := game.loadCurrentImage(); err != nil {
-		log.Printf("Failed to load initial image: %v", err)
-	}
-	game.switchTime = time.Now().Add(interval)
 
-	// 5. Configure Ebiten window for full-screen
+	// Load the very first image on startup
+	if err := game.loadCurrentSlide(); err != nil {
+		game.loadingError = err
+	}
+
+	// Setup Ebiten
 	ebiten.SetFullscreen(true)
 	ebiten.SetWindowResizable(false)
 	ebiten.SetWindowTitle("OpenFrame Slideshow")
 
-	// 6. Run the slideshow
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("Ebiten run error: %v", err)
 	}
 }
 
-// readConfig loads and parses the JSON config from ~/.openframe/config.json
+// -------------------- SlideshowGame Methods -------------------- //
+
+// advanceSlide moves to the next Photo, unloads old TiledImage, and loads the new one.
+func (g *SlideshowGame) advanceSlide() {
+	// Move index
+	g.currentIndex = (g.currentIndex + 1) % len(g.photos)
+
+	// Free the old slide
+	g.freeSlide()
+
+	// Attempt to load the new slide
+	if err := g.loadCurrentSlide(); err != nil {
+		g.loadingError = err
+	} else {
+		g.loadingError = nil
+	}
+
+	// Reset switch time
+	g.switchTime = time.Now().Add(g.interval)
+}
+
+// loadCurrentSlide loads (decodes + tiles) the current Photo on demand.
+func (g *SlideshowGame) loadCurrentSlide() error {
+	if g.currentIndex < 0 || g.currentIndex >= len(g.photos) {
+		return fmt.Errorf("invalid currentIndex %d", g.currentIndex)
+	}
+	p := g.photos[g.currentIndex]
+	tiled, err := loadTiledEbitenImage(p.FilePath)
+	if err != nil {
+		return err
+	}
+	g.currentSlide = tiled
+	return nil
+}
+
+// freeSlide disposes of the current TiledImage so it can be GC'd.
+func (g *SlideshowGame) freeSlide() {
+	if g.currentSlide == nil {
+		return
+	}
+	// Each tile is an *ebiten.Image that can be disposed
+	for _, t := range g.currentSlide.tiles {
+		t.Dispose()
+	}
+	g.currentSlide = nil
+}
+
+// -------------------- Reading Config -------------------- //
+
 func readConfig() (Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return Config{}, fmt.Errorf("failed to get user home directory: %w", err)
 	}
-
 	configPath := filepath.Join(homeDir, DefaultConfigPath)
 	data, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return Config{}, fmt.Errorf("failed to read config file at %s: %w", configPath, err)
 	}
-
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("failed to parse config JSON: %w", err)
 	}
-
-	// Apply some defaults if needed
-	if cfg.Interval == 0 {
-		cfg.Interval = 10 // default to 10 seconds
+	// Default interval if not set
+	if cfg.Interval <= 0 {
+		cfg.Interval = 10
 	}
-
 	return cfg, nil
 }
 
-// loadPhotos walks through each album directory and collects photo metadata (paths + times).
+// -------------------- Photo Loading -------------------- //
+
+// loadPhotos walks each album directory, gathering metadata for each image file.
 func loadPhotos(cfg Config) ([]Photo, error) {
 	var photos []Photo
-
 	for _, albumDir := range cfg.Albums {
 		err := filepath.WalkDir(albumDir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				// If an error occurs walking this path, log & skip
-				log.Printf("Error accessing path %s: %v", path, err)
-				return nil
+				log.Printf("Error accessing %s: %v", path, err)
+				return nil // skip but continue
 			}
 			if d.IsDir() {
 				return nil
 			}
-			// Simple filter for image files by extension
 			if isImageFile(path) {
-				takenTime, err := extractTakenTime(path)
+				t, err := extractTakenTime(path)
 				if err != nil {
-					// Log a warning, skip
 					log.Printf("Warning: could not extract time for %s: %v", path, err)
 					return nil
 				}
 				photos = append(photos, Photo{
 					FilePath:  path,
-					TakenTime: takenTime,
+					TakenTime: t,
 				})
 			}
 			return nil
@@ -251,11 +307,9 @@ func loadPhotos(cfg Config) ([]Photo, error) {
 			log.Printf("Error walking directory %s: %v", albumDir, err)
 		}
 	}
-
 	return photos, nil
 }
 
-// isImageFile does a naive file extension check for JPEG/PNG/etc.
 func isImageFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
@@ -265,7 +319,6 @@ func isImageFile(path string) bool {
 	return false
 }
 
-// extractTakenTime attempts to read EXIF data; falls back to file mod time if EXIF not found.
 func extractTakenTime(path string) (time.Time, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -290,8 +343,60 @@ func extractTakenTime(path string) (time.Time, error) {
 	return info.ModTime(), nil
 }
 
-// min is a helper function to return the smaller of two floats.
-func min(a, b float64) float64 {
+// -------------------- Tiling Logic -------------------- //
+
+// loadTiledEbitenImage decodes an image from disk, then splits it into multiple
+// tiles if it's larger than the Ebiten max texture size, returning a TiledImage.
+func loadTiledEbitenImage(filePath string) (*TiledImage, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to open file %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	src, _, err := image.Decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode image %s: %w", filePath, err)
+	}
+
+	w := src.Bounds().Dx()
+	h := src.Bounds().Dy()
+
+	maxSize := MaxTileSize
+	tiles := make([]*ebiten.Image, 0)
+
+	// Chop up the source image into sub-images each no larger than maxSize
+	for y := 0; y < h; y += maxSize {
+		for x := 0; x < w; x += maxSize {
+			subRect := image.Rect(x, y, minInt(x+maxSize, w), minInt(y+maxSize, h))
+			subImg := src.(interface {
+				SubImage(r image.Rectangle) image.Image
+			}).SubImage(subRect)
+
+			tile := ebiten.NewImageFromImage(subImg)
+			tiles = append(tiles, tile)
+		}
+	}
+
+	return &TiledImage{
+		tiles:       tiles,
+		totalWidth:  w,
+		totalHeight: h,
+	}, nil
+}
+
+// -------------------- Helpers -------------------- //
+
+func computeScale(imgW, imgH, screenW, screenH int) float64 {
+	if imgW == 0 || imgH == 0 {
+		return 1.0
+	}
+	scaleW := float64(screenW) / float64(imgW)
+	scaleH := float64(screenH) / float64(imgH)
+	return math.Min(scaleW, scaleH)
+}
+
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
