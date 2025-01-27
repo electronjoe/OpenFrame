@@ -53,6 +53,7 @@ func main() {
     ebiten.SetFullscreen(true)
     ebiten.SetWindowResizable(false)
     ebiten.SetWindowTitle("OpenFrame Slideshow")
+	ebiten.SetCursorMode(ebiten.CursorModeHidden)
 
     // 8. Run Ebiten game loop
     if err := ebiten.RunGame(game); err != nil {
