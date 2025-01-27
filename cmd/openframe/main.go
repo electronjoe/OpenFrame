@@ -6,6 +6,7 @@ import (
     "time"
 
     "github.com/hajimehoshi/ebiten/v2"
+
     "github.com/electronjoe/OpenFrame/internal/config"
     "github.com/electronjoe/OpenFrame/internal/photo"
     "github.com/electronjoe/OpenFrame/internal/slideshow"
@@ -28,29 +29,32 @@ func main() {
         return
     }
 
-    // 3. Sort by date/time ascending
+    // 3. Sort photos by date/time ascending
     sort.Slice(photos, func(i, j int) bool {
         return photos[i].TakenTime.Before(photos[j].TakenTime)
     })
 
-    // 4. Create our slideshow game
+    // 4. Build slides from the sorted photos (pairs up consecutive portrait images if possible)
+    slides := slideshow.BuildSlidesFromPhotos(photos)
+
+    // 5. Create the slideshow game
     game := slideshow.NewSlideshowGame(
-        photos,
+        slides,
         time.Duration(cfg.Interval)*time.Second,
         cfg.DateOverlay,
     )
 
-    // 5. Load the very first image on startup
+    // 6. Load the very first slide on startup
     if err := game.LoadCurrentSlide(); err != nil {
         game.SetLoadingError(err)
     }
 
-    // 6. Configure Ebiten
+    // 7. Configure Ebiten
     ebiten.SetFullscreen(true)
     ebiten.SetWindowResizable(false)
     ebiten.SetWindowTitle("OpenFrame Slideshow")
 
-    // 7. Run Ebiten game loop
+    // 8. Run Ebiten game loop
     if err := ebiten.RunGame(game); err != nil {
         log.Fatalf("Ebiten run error: %v", err)
     }

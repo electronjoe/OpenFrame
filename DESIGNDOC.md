@@ -15,10 +15,18 @@ OpenFrame is an open-source photo frame solution leveraging a Raspberry Pi 4 and
 1. **Chronological Photo Display**:  
    - Merge photos from multiple albums into a single chronological stream.
    - Display images seamlessly with configurable intervals.
+   - When two portrait-orientation images are consecutive, and the display allows, place them side-by-side in the same slide.
+     Ensure they are centered horizontally on the display (so that the right edge of the left image
+     is flush with the left edge of the right image), and use appropriate offsets so they appear
+     visually balanced.
 
 2. **Easy Configuration**:  
    - Load settings from a JSON config (e.g., `~/.openframe/config.json`).
    - Support toggling overlays (date/location), setting daily on/off times, and specifying local directories.
+   - When two portrait photos are shown side-by-side, if overlays are enabled:
+     - Display the metadata for the left photo at the bottom-left corner of that photo.
+     - Display the metadata for the right photo at the bottom-right corner of that photo.
+     - Continue to apply the same semi-transparent overlay style for each.
 
 3. **HDMI-CEC Integration**:  
    - Power on/off the Samsung The Frame TV daily at specified times.

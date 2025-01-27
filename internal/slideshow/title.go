@@ -7,14 +7,16 @@ import (
     "os"
 
     "github.com/hajimehoshi/ebiten/v2"
-
-	_ "image/jpeg"
+    // We include blank imports for standard image decoders
+    _ "image/gif"
+    _ "image/jpeg"
+    _ "image/png"
 )
 
 const maxTileSize = 2048
 
 // TiledImage holds one large image that may be split into multiple sub-images (tiles)
-// if its dimensions exceed Ebiten’s max texture size.
+// if its dimensions exceed Ebiten’s max texture size (maxTileSize).
 type TiledImage struct {
     tiles       []*ebiten.Image
     totalWidth  int
@@ -49,7 +51,6 @@ func loadTiledEbitenImage(filePath string) (*TiledImage, error) {
                 minInt(x+maxTileSize, w),
                 minInt(y+maxTileSize, h),
             )
-
             subImg := src.(interface {
                 SubImage(r image.Rectangle) image.Image
             }).SubImage(subRect)
@@ -73,6 +74,7 @@ func minInt(a, b int) int {
     return b
 }
 
+// computeScale calculates a uniform scale so the image fits within screenW x screenH.
 func computeScale(imgW, imgH, screenW, screenH int) float64 {
     if imgW == 0 || imgH == 0 {
         return 1.0
