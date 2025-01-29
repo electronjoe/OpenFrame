@@ -184,7 +184,7 @@ func drawTiledImageWithOffset(screen *ebiten.Image, t *TiledImage, scale float64
 func drawDateOverlayLeft(screen *ebiten.Image, takenTime time.Time) {
     face := basicfont.Face7x13
     _, sh := screen.Size()
-    dateStr := takenTime.Format("2006-01-02 15:04:05")
+    dateStr := takenTime.Format("2006-01-02")
 
     x := 20
     y := sh - 20
@@ -195,7 +195,7 @@ func drawDateOverlayLeft(screen *ebiten.Image, takenTime time.Time) {
 func drawDateOverlayRight(screen *ebiten.Image, takenTime time.Time) {
     face := basicfont.Face7x13
     sw, sh := screen.Size()
-    dateStr := takenTime.Format("2006-01-02 15:04:05")
+    dateStr := takenTime.Format("2006-01-02")
 
     // We can measure the text width to position it correctly.
     textBound := text.BoundString(face, dateStr)
