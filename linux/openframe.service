@@ -1,0 +1,18 @@
+# ~/.config/systemd/user/openframe.service
+
+[Unit]
+Description=OpenFrame Slide Show Service
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+ExecStart=/home/electronjoe/OpenFrame/main
+
+# Auto-restart on crash, but wait 30 seconds before restarting
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
