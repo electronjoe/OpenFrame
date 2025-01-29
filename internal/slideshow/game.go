@@ -45,14 +45,14 @@ func isPortrait(p photo.Photo) bool {
 }
 
 func displayAllowsSideBySide() bool {
-    // In a typical scenario, always true if the display is wide enough (e.g., a 16:9 TV).
-    // Here, we can keep it simple and return true, or add real dimension checks if desired.
+    // In a typical scenario, always true if the display is wide enough (e.g. a 16:9 TV).
+    // Here, we can keep it simple and return true, or do real dimension checks if desired.
     return true
 }
 
 // SlideshowGame orchestrates the slideshow of slides (which each contain 1 or 2 photos).
 type SlideshowGame struct {
-    slides      []Slide
+    slides       []Slide
     currentIndex int
 
     // currentTiledImages will hold the decoded TiledImages for the current slide:
@@ -142,7 +142,7 @@ func (g *SlideshowGame) LoadCurrentSlide() error {
 
     // Load each photo in the slide
     for _, p := range slide.Photos {
-        tiled, err := loadTiledEbitenImage(p.FilePath)
+        tiled, err := loadTiledEbitenImage(p)
         if err != nil {
             return err
         }

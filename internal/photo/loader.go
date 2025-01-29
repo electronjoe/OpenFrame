@@ -16,12 +16,13 @@ import (
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-// Photo represents a single photo's metadata.
+// Photo represents a single photo's metadata (including orientation).
 type Photo struct {
-	FilePath  string
-	TakenTime time.Time
-	Width     int
-	Height    int
+	FilePath    string
+	TakenTime   time.Time
+	Width       int
+	Height      int
+	Orientation int // EXIF orientation value, 1–8
 }
 
 // Load walks each album directory, gathering metadata for each image file.
@@ -38,17 +39,18 @@ func Load(albumDirs []string) ([]Photo, error) {
 				return nil
 			}
 			if isImageFile(path) {
-				takenTime, width, height, err := extractMetadata(path)
+				takenTime, width, height, orientation, err := extractMetadata(path)
 				if err != nil {
 					// Not critical; just log a warning and skip this file
 					log.Printf("Warning: could not extract metadata for %s: %v", path, err)
 					return nil
 				}
 				photos = append(photos, Photo{
-					FilePath:  path,
-					TakenTime: takenTime,
-					Width:     width,
-					Height:    height,
+					FilePath:    path,
+					TakenTime:   takenTime,
+					Width:       width,
+					Height:      height,
+					Orientation: orientation,
 				})
 			}
 			return nil
@@ -71,48 +73,65 @@ func isImageFile(path string) bool {
 	return false
 }
 
-// extractMetadata obtains the photo's timestamp (from EXIF or file mod time) and dimensions.
-func extractMetadata(path string) (time.Time, int, int, error) {
-	// 1) Extract the photo's timestamp
-	takenTime, err := extractTakenTime(path)
+// extractMetadata obtains the photo's timestamp (from EXIF or file mod time),
+// the image dimensions, and the EXIF orientation (1–8).
+func extractMetadata(path string) (time.Time, int, int, int, error) {
+	takenTime, orientation, err := extractTimeAndOrientation(path)
 	if err != nil {
-		return time.Time{}, 0, 0, err
+		return time.Time{}, 0, 0, 0, err
 	}
 
-	// 2) Extract the photo's width/height
 	width, height, err := extractDimensions(path)
 	if err != nil {
-		return time.Time{}, 0, 0, err
+		return time.Time{}, 0, 0, 0, err
 	}
 
-	return takenTime, width, height, nil
+	return takenTime, width, height, orientation, nil
 }
 
-// extractTakenTime looks for EXIF DateTime; falls back to file mod time if unavailable.
-func extractTakenTime(path string) (time.Time, error) {
+// extractTimeAndOrientation reads EXIF data to get date/time and orientation.
+// If not found, orientation defaults to 1 (no transform).
+func extractTimeAndOrientation(path string) (time.Time, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("open file: %w", err)
+		return time.Time{}, 1, fmt.Errorf("open file: %w", err)
 	}
 	defer f.Close()
 
-	// Try to decode EXIF
-	x, err := exif.Decode(f)
-	if err == nil && x != nil {
+	var takenTime time.Time
+	var orientation = 1 // default if tag missing or invalid
+
+	x, errDecode := exif.Decode(f)
+	if errDecode == nil && x != nil {
+		// Attempt to read EXIF DateTime
 		if t, errDate := x.DateTime(); errDate == nil {
-			return t, nil
+			takenTime = t
+		}
+		// Attempt to read Orientation tag
+		tagOrient, errOrient := x.Get(exif.Orientation)
+		if errOrient == nil && tagOrient != nil {
+			if orientVal, errConv := tagOrient.Int(0); errConv == nil {
+				orientation = orientVal
+			}
 		}
 	}
 
-	// Fallback: file mod time
-	info, err := os.Stat(path)
-	if err != nil {
-		return time.Time{}, err
+	// Fallback to file mod time if EXIF time was not available
+	if takenTime.IsZero() {
+		info, errStat := os.Stat(path)
+		if errStat == nil {
+			takenTime = info.ModTime()
+		} else {
+			// If we somehow can't get mod time, just pick epoch
+			takenTime = time.Unix(0, 0)
+		}
 	}
-	return info.ModTime(), nil
+
+	return takenTime, orientation, nil
 }
 
-// extractDimensions uses image.DecodeConfig to get width and height without decoding the full image.
+// extractDimensions uses image.DecodeConfig to get width and height
+// without decoding the full image.
 func extractDimensions(path string) (int, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
