@@ -124,7 +124,8 @@ Below is the high-level architecture of the OpenFrame system:
     "offTime": "21:00"
   },
   "interval": 10,   // in seconds
-  "hdmiInput": 1
+  "hdmiInput": 1,
+  "randomize": true, // randomize slide order
 }
 ```
 

@@ -16,6 +16,7 @@ type Config struct {
     Albums      []string `json:"albums"`
     DateOverlay bool     `json:"dateOverlay"`
     Interval    int      `json:"interval"`
+    Randomize   bool     `json:"randomize"`
 }
 
 // Read retrieves and parses the JSON config from ~/.openframe/config.json.
