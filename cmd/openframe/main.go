@@ -8,6 +8,7 @@ import (
 
     "github.com/hajimehoshi/ebiten/v2"
 
+    "github.com/electronjoe/OpenFrame/internal/cec"
     "github.com/electronjoe/OpenFrame/internal/config"
     "github.com/electronjoe/OpenFrame/internal/photo"
     "github.com/electronjoe/OpenFrame/internal/slideshow"
@@ -30,23 +31,19 @@ func main() {
         return
     }
 
-    // 3. Sort or Shuffle photos based on cfg.Randomize
+    // 3. Sort or shuffle
     if cfg.Randomize {
-        // Use current time to seed
         rand.Seed(time.Now().UnixNano())
         rand.Shuffle(len(photos), func(i, j int) {
             photos[i], photos[j] = photos[j], photos[i]
         })
-        log.Println("Photo order is randomized.")
     } else {
-        // Chronological order
         sort.Slice(photos, func(i, j int) bool {
             return photos[i].TakenTime.Before(photos[j].TakenTime)
         })
-        log.Println("Photo order is chronological.")
     }
 
-    // 4. Build slides from the (now-ordered) photos
+    // 4. Build slides
     slides := slideshow.BuildSlidesFromPhotos(photos)
 
     // 5. Create the slideshow game
@@ -56,18 +53,26 @@ func main() {
         cfg.DateOverlay,
     )
 
-    // 6. Load the very first slide on startup
+    // 6. Load the first slide
     if err := game.LoadCurrentSlide(); err != nil {
         game.SetLoadingError(err)
     }
 
-    // 7. Configure Ebiten
+    // 7. Prepare remote command channel
+    remoteEvents := make(chan cec.RemoteCommand, 10)
+    // Start the CEC listener in a goroutine
+    cec.StartCECListener(remoteEvents)
+
+    // 8. Assign the channel to the game
+    game.SetRemoteCommandChan(remoteEvents)
+
+    // 9. Configure Ebiten
     ebiten.SetFullscreen(true)
     ebiten.SetWindowResizable(false)
     ebiten.SetWindowTitle("OpenFrame Slideshow")
     ebiten.SetCursorMode(ebiten.CursorModeHidden)
 
-    // 8. Run Ebiten game loop
+    // 10. Run the Ebiten game loop
     if err := ebiten.RunGame(game); err != nil {
         log.Fatalf("Ebiten run error: %v", err)
     }

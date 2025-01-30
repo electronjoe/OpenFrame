@@ -191,6 +191,11 @@ func drawDateOverlayLeft(screen *ebiten.Image, takenTime time.Time) {
     text.Draw(screen, dateStr, face, x, y, color.White)
 }
 
+// drawPauseIndicator places Pause notification text at top left of the screen.
+func drawPauseIndicator(screen *ebiten.Image) {
+    text.Draw(screen, "Slideshow Paused", basicfont.Face7x13, 20, 30, color.White)
+}
+
 // drawDateOverlayRight places the photo timestamp in the bottom-right corner.
 func drawDateOverlayRight(screen *ebiten.Image, takenTime time.Time) {
     face := basicfont.Face7x13
