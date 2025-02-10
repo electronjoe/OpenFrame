@@ -2,6 +2,7 @@ package slideshow
 
 import (
     "image/color"
+    "math"
     "time"
 
     "github.com/hajimehoshi/ebiten/v2"
@@ -174,33 +175,75 @@ func drawTiledImageWithOffset(screen *ebiten.Image, t *TiledImage, scale float64
     }
 }
 
-// drawDateOverlayLeft places the photo timestamp in the bottom-left corner.
-func drawDateOverlayLeft(screen *ebiten.Image, takenTime time.Time) {
-    face := basicfont.Face7x13
-    _, sh := screen.Size()
-    dateStr := takenTime.Format("2006-01-02")
-
-    x := 20
-    y := sh - 20
-    text.Draw(screen, dateStr, face, x, y, color.White)
-}
-
 // drawPauseIndicator places Pause notification text at top left of the screen.
 func drawPauseIndicator(screen *ebiten.Image) {
     text.Draw(screen, "Slideshow Paused", basicfont.Face7x13, 20, 30, color.White)
 }
 
-// drawDateOverlayRight places the photo timestamp in the bottom-right corner.
-func drawDateOverlayRight(screen *ebiten.Image, takenTime time.Time) {
-    face := basicfont.Face7x13
-    sw, sh := screen.Size()
+// drawDateOverlayLeft rotates the date 90° CCW and places it near the bottom-left edge.
+func drawDateOverlayLeft(screen *ebiten.Image, takenTime time.Time) {
     dateStr := takenTime.Format("2006-01-02")
+    drawVerticalText(screen, dateStr, true)
+}
 
-    // We can measure the text width to position it correctly.
-    textBound := text.BoundString(face, dateStr)
-    textWidth := textBound.Dx()
+// drawDateOverlayRight rotates the date 90° CCW and places it near the bottom-right edge.
+func drawDateOverlayRight(screen *ebiten.Image, takenTime time.Time) {
+    dateStr := takenTime.Format("2006-01-02")
+    drawVerticalText(screen, dateStr, false)
+}
 
-    x := sw - textWidth - 20
-    y := sh - 20
-    text.Draw(screen, dateStr, face, x, y, color.White)
+// drawVerticalText creates a small offscreen image of the date text, then rotates it 90° CCW
+// and draws it at the screen edge (left if `isLeftEdge`, right otherwise).
+func drawVerticalText(screen *ebiten.Image, textStr string, isLeftEdge bool) {
+    face := basicfont.Face7x13
+
+    // Measure the text in its normal orientation.
+    bounds := text.BoundString(face, textStr)
+    textWidth := bounds.Dx()
+    textHeight := bounds.Dy()
+
+    // Create an offscreen image big enough for the text.
+    textImg := ebiten.NewImage(textWidth, textHeight)
+    // Optional: fill a semi-transparent background if desired:
+    // textImg.Fill(color.RGBA{0, 0, 0, 128})
+
+    // Draw the text in normal (horizontal) orientation at top-left of the offscreen.
+    // We typically draw so the text baseline is near the bottom of that offscreen rect:
+    text.Draw(textImg, textStr, face, 0, textHeight-2, color.White)
+
+    // Now we set up our transformation to rotate 90° CCW.
+    // 90° CCW is -π/2 radians.
+    op := &ebiten.DrawImageOptions{}
+
+    // First, translate so the image center is at the origin (0,0).
+    op.GeoM.Translate(-float64(textWidth)/2, -float64(textHeight)/2)
+
+    // Rotate 90° counter-clockwise.
+    op.GeoM.Rotate(-math.Pi / 2)
+
+    // We’ll place the resulting, rotated image along the appropriate screen edge.
+    screenW, screenH := screen.Size()
+    margin := 20.0
+
+    // After rotation:
+    // - The "width" of the text (in the new orientation) will be textHeight.
+    // - The "height" of the text (in the new orientation) will be textWidth.
+
+    if isLeftEdge {
+        // For the left edge, x is margin + half of new image width,
+        // so that the left side lines up near margin. We want the bottom of text near screen bottom.
+        finalX := margin + float64(textHeight)/2
+        finalY := float64(screenH) - margin - float64(textWidth)/2
+
+        op.GeoM.Translate(finalX, finalY)
+    } else {
+        // For the right edge, x is (screenW - margin - half of new image width).
+        finalX := float64(screenW) - margin - float64(textHeight)/2
+        finalY := float64(screenH) - margin - float64(textWidth)/2
+
+        op.GeoM.Translate(finalX, finalY)
+    }
+
+    // Finally, draw the rotated text onto the main screen.
+    screen.DrawImage(textImg, op)
 }
