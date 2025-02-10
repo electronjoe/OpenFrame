@@ -74,8 +74,12 @@ func drawSingleImage(screen *ebiten.Image, t *TiledImage) {
     }
 }
 
-// drawTwoPortraitsSideBySide places each portrait TiledImage flush in the center.
-// Both images share a single scale factor so their combined width fits on screen.
+// drawTwoPortraitsSideBySide draws two portrait TiledImages (leftImg and rightImg)
+// side by side on the given Ebiten screen. Each image is scaled independently
+// so that it fits within half the screen’s width (and the full screen height)
+// while retaining its aspect ratio. The left image is centered in the left half,
+// and the right image is centered in the right half, maximizing each image’s size
+// without overflowing their respective half of the screen.
 func drawTwoPortraitsSideBySide(screen *ebiten.Image, leftImg, rightImg *TiledImage) {
     sw, sh := screen.Size()
 
@@ -83,35 +87,25 @@ func drawTwoPortraitsSideBySide(screen *ebiten.Image, leftImg, rightImg *TiledIm
     lw, lh := leftImg.totalWidth, leftImg.totalHeight
     rw, rh := rightImg.totalWidth, rightImg.totalHeight
 
-    // Compute the combined width and max height
-    combinedWidth := lw + rw
-    combinedHeight := maxInt(lh, rh)
+    // Separate scale factors: each must fit in sw/2 x sh
+    leftScale := computeScale(lw, lh, sw/2, sh)
+    scaledLW := float64(lw) * leftScale
+    scaledLH := float64(lh) * leftScale
 
-    // A single scale so both images (side by side) fit within screen
-    scale := computeScale(combinedWidth, combinedHeight, sw, sh)
+    rightScale := computeScale(rw, rh, sw/2, sh)
+    scaledRW := float64(rw) * rightScale
+    scaledRH := float64(rh) * rightScale
 
-    // Calculate each image's scaled width/height
-    scaledLW := float64(lw) * scale
-    scaledLH := float64(lh) * scale
-    scaledRW := float64(rw) * scale
-    scaledRH := float64(rh) * scale
-
-    totalScaledWidth := scaledLW + scaledRW
-
-    // Center the pair horizontally
-    // leftX is where the left image starts, rightX is leftX + scaledLeftWidth
-    leftX := float64(sw)/2 - totalScaledWidth/2
-    rightX := leftX + scaledLW
-
-    // Center each image vertically based on its own scaled height
+    // Center each in its own half horizontally, and in full screen vertically
+    leftX := (float64(sw)/2 - scaledLW) / 2
     leftY := float64(sh)/2 - scaledLH/2
+
+    rightX := float64(sw)/2 + ((float64(sw)/2 - scaledRW) / 2)
     rightY := float64(sh)/2 - scaledRH/2
 
-    // Draw the left portrait
-    drawTiledImage(screen, leftImg, scale, leftX, leftY)
-
-    // Draw the right portrait flush against the left
-    drawTiledImage(screen, rightImg, scale, rightX, rightY)
+    // Now draw them
+    drawTiledImage(screen, leftImg, leftScale, leftX, leftY)
+    drawTiledImage(screen, rightImg, rightScale, rightX, rightY)
 }
 
 // Helper that draws a TiledImage at (offsetX, offsetY) using the given scale.
