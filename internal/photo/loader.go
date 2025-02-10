@@ -86,6 +86,13 @@ func extractMetadata(path string) (time.Time, int, int, int, error) {
 		return time.Time{}, 0, 0, 0, err
 	}
 
+	// If orientation is 5,6,7,8, swap width and height
+	// so that Photo.Width, Photo.Height reflect the final (rotated) dimensions.
+	switch orientation {
+	case 5, 6, 7, 8:
+		width, height = height, width
+	}
+
 	return takenTime, width, height, orientation, nil
 }
 
