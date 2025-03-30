@@ -1,16 +1,41 @@
 # ~/.config/systemd/user/openframe.service
-
 [Unit]
 Description=OpenFrame Slide Show Service
+# If you use a full desktop environment, you may need:
 After=graphical-session.target
 
 [Service]
 Type=simple
+
+# Make sure we're pointing to the correct display/X session:
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=%h/.Xauthority
-ExecStart=/home/electronjoe/OpenFrame/main
 
-# Auto-restart on crash, but wait 30 seconds before restarting
+# --- PRE-START HOOKS ---
+# Power on TV (CEC “on 0”)
+# Then set HDMI input to #2. The exact CEC address for HDMI2 can vary. 
+# Often "tx 1F:82:20:00" works if the TV’s physical address for HDMI2 is 2.0.0.0
+
+# 1) Power on TV (CEC "on 0")
+ExecStartPre=/bin/sh -c 'echo "on 0" | cec-client -s -d 1'
+
+# 2) Wait 10 seconds for TV to fully power up.
+ExecStartPre=/bin/sleep 10
+
+# 3) Set TV to HDMI2
+ExecStartPre=/bin/sh -c 'echo "tx 1F:82:20:00" | cec-client -s -d 1'
+
+# 4) Wait 10 seconds for TV to fully power up.
+ExecStartPre=/bin/sleep 10
+
+# --- ACTUAL SERVICE STARTS ---
+ExecStart=/home/electronjoe/OpenFrame/openframe
+
+# --- POST-STOP HOOKS ---
+# After Ebiten is done, we can safely turn the TV off (CEC “standby 0”).
+ExecStopPost=/bin/sh -c 'echo "standby 0" | cec-client -s -d 1'
+
+# Auto-restart on crash:
 Restart=on-failure
 RestartSec=30
 

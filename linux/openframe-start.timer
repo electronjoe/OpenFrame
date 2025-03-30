@@ -1,0 +1,11 @@
+# ~/.config/systemd/user/openframe-start.timer
+[Unit]
+Description=Every day at 06:00, start OpenFrame
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=openframe-start.service
+
+[Install]
+WantedBy=timers.target

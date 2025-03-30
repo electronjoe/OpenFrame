@@ -1,0 +1,8 @@
+# ~/.config/systemd/user/openframe-stop.service
+[Unit]
+Description=Stops OpenFrame slideshow & powers off TV
+Requires=openframe.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user stop openframe.service

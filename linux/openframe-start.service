@@ -1,0 +1,8 @@
+# ~/.config/systemd/user/openframe-start.service
+[Unit]
+Description=Starts OpenFrame slideshow & powers on TV
+Requires=openframe.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user start openframe.service
