@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-OpenFrame is an open-source photo frame solution leveraging a Raspberry Pi 4 and the Samsung The Frame TV. It displays multiple local photo albums in chronological order, manages daily on/off schedules, and enables user navigation (skipping photos by year) via HDMI-CEC. This design doc outlines how the Golang application will be structured, how it will handle concurrency, how configuration is parsed, and how HDMI-CEC integration will work.
+OpenFrame is an open-source photo frame solution leveraging a Raspberry Pi 4 and the Samsung The Frame TV. It shuffles photos from multiple local albums into a random slideshow, manages daily on/off schedules, and enables basic next/previous navigation via HDMI-CEC. This design doc outlines how the Golang application will be structured, how it will handle concurrency, how configuration is parsed, and how HDMI-CEC integration will work.
 
 ---
 
@@ -12,10 +12,10 @@ OpenFrame is an open-source photo frame solution leveraging a Raspberry Pi 4 and
 
 ### **Goals**
 
-1. **Chronological Photo Display**:  
-   - Merge photos from multiple albums into a single chronological stream.
+1. **Randomized Photo Display**:  
+   - Shuffle photos from multiple albums into a single stream before slides are built.
    - Display images seamlessly with configurable intervals.
-   - When two portrait-orientation images are consecutive, and the display allows, place them side-by-side in the same slide.
+   - When two portrait-orientation images are consecutive post-shuffle, and the display allows, place them side-by-side in the same slide.
      Ensure they are centered horizontally on the display (so that the right edge of the left image
      is flush with the left edge of the right image), and use appropriate offsets so they appear
      visually balanced.
@@ -31,7 +31,7 @@ OpenFrame is an open-source photo frame solution leveraging a Raspberry Pi 4 and
 3. **HDMI-CEC Integration**:  
    - Power on/off the Samsung The Frame TV daily at specified times.
    - Automatically switch TV input to the Pi’s HDMI port.
-   - Use remote navigation events to skip photos by year.
+   - Use remote navigation events to move to the next or previous slide.
 
 4. **Robust & Resource-Efficient**:  
    - Run continuously on Raspberry Pi 4 with minimal resource overhead.
@@ -46,7 +46,7 @@ OpenFrame is an open-source photo frame solution leveraging a Raspberry Pi 4 and
    - No advanced photo editing features beyond simple overlays.
 
 3. **Deep Remote Control Mapping**:  
-   - We only support skipping forward/backward by year. Additional remote controls (e.g., next/previous photo) may be explored in the future.
+   - We only support basic next/previous navigation. Additional remote controls (e.g., jump to specific albums) may be explored in the future.
 
 ---
 
@@ -91,7 +91,7 @@ Below is the high-level architecture of the OpenFrame system:
 
 2. **Photo Library**  
    - Fetched from local directories specified in `config.json`.
-   - Indexed, sorted by date/time (EXIF or file creation date fallback).
+   - Indexed with EXIF metadata captured for overlays, then randomized before slides are built.
 
 3. **HDMI-CEC Module**  
    - Interacts with underlying CEC libraries (e.g., `libcec` or similar).  
@@ -124,8 +124,7 @@ Below is the high-level architecture of the OpenFrame system:
     "offTime": "21:00"
   },
   "interval": 10,   // in seconds
-  "hdmiInput": 1,
-  "randomize": true, // randomize slide order
+  "hdmiInput": 1
 }
 ```
 
@@ -152,14 +151,13 @@ Below is the high-level architecture of the OpenFrame system:
      }
      ```
 
-3. **Merging Albums**  
+3. **Combining & Randomizing**  
    - Combine all `Photo` objects from multiple album directories into a single slice.  
-   - Sort by `TakenTime` in ascending order.
+   - Shuffle the slice using `rand.Shuffle` per application startup so the viewing order always feels fresh while metadata remains intact for overlays.
 
-4. **Skipping by Year**  
-   - Maintain an index pointing to the currently displayed photo.  
-   - When a “skip forward” event occurs, find the next `Photo` whose year is one greater than the current year.  
-   - Similarly, skipping backward finds the previous `Photo` with a year one less than the current year.
+4. **Slide Index Management**  
+   - Maintain an index pointing to the currently displayed slide (supporting single photos or portrait pairs).  
+   - Timer-driven advances and remote commands increment or decrement this index modulo the number of slides.
 
 ### 5.3 Concurrency Model
 
@@ -198,7 +196,7 @@ Below is the high-level architecture of the OpenFrame system:
    - **Power Off**: CEC “Standby”.  
    - **Select HDMI Input**: Send a command to switch to input # specified in `config.hdmiInput`.  
    - **Remote Key Events**: Parse “Forward”, “Backward”, “Right Arrow”, “Left Arrow” CEC events.  
-     - On detection, push a `RemoteCommand` into `remoteEvents` channel for slideshow skipping.
+     - On detection, push a `RemoteCommand` into `remoteEvents` to request next/previous slide navigation.
 
 3. **Scheduler**:  
    - Runs a time-based loop (cron-like or custom) that triggers:
@@ -240,7 +238,7 @@ Below is the high-level architecture of the OpenFrame system:
 ## 7. Implementation Plan
 
 1. **Phase 1: Config & Photo Indexing**  
-   - Parse JSON, load photos, sort them by date.  
+   - Parse JSON, load photos, and randomize their order while retaining metadata.  
    - Basic console-based slideshow (no actual rendering yet).
 
 2. **Phase 2: Slideshow & Rendering**  
@@ -249,7 +247,7 @@ Below is the high-level architecture of the OpenFrame system:
 
 3. **Phase 3: HDMI-CEC Integration**  
    - Power on/off TV, switch input at scheduled times.  
-   - Remote command handling for skip-by-year.
+   - Remote command handling for next/previous navigation.
 
 4. **Phase 4: Polishing & Optimization**  
    - Add logging, error handling, robust concurrency.  
@@ -262,7 +260,7 @@ Below is the high-level architecture of the OpenFrame system:
 
 1. **Unit Tests**:  
    - Config parsing: ensure missing or invalid fields are handled properly.  
-   - Photo indexing: test EXIF date extraction, fallback logic, sorting.  
+   - Photo indexing: test EXIF date extraction, fallback logic, and randomization routines.  
    - Overlays: ensure date/time text is rendered in correct location.
 
 2. **Integration Tests**:  
@@ -271,7 +269,7 @@ Below is the high-level architecture of the OpenFrame system:
 
 3. **Manual QA**:  
    - Deploy on a Pi with a real Samsung The Frame TV.  
-   - Confirm correct daily power cycles, skipping, and image displays.
+   - Confirm correct daily power cycles, manual skipping, and image displays.
 
 ---
 
@@ -300,7 +298,7 @@ Below is the high-level architecture of the OpenFrame system:
 2. **Cloud Sync**:  
    - Could we eventually add a syncing feature for Google Photos or other providers?  
 3. **Extended Remote Controls**:  
-   - Map more remote buttons for next/previous photo, jump to oldest/newest, or other advanced navigations.  
+   - Map more remote buttons for album jumps, quick favorites, or other advanced navigations.  
 4. **Transitions**:  
    - Fade-in/out or Ken Burns effects to improve aesthetics?
 

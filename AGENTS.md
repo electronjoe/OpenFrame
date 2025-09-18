@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Primary entry point lives in `cmd/openframe/main.go`, orchestrating config parsing, photo ingestion, CEC listeners, and the Ebiten slideshow. Shared packages live under `internal/` (`config`, `photo`, `slideshow`, `cec`); keep their APIs cohesive and prefer creating new sibling packages over inflating `main`. Configuration loads from `~/.openframe/config.json`—reflect new fields in both the struct tags and documentation. Utility binaries in `cmd/cectest` and `cmd/geocode` support manual HDMI-CEC and metadata experiments. Systemd units live in `linux/`.
+Primary entry point lives in `cmd/openframe/main.go`, orchestrating config parsing, photo ingestion, CEC listeners, and the Ebiten slideshow. Shared packages live under `internal/` (`config`, `photo`, `slideshow`, `cec`); keep their APIs cohesive and prefer creating new sibling packages over inflating `main`. Configuration loads from `~/.openframe/config.json`—reflect new fields in both the struct tags and documentation—and the slideshow always randomizes photo order before building slides. Utility binaries in `cmd/cectest` and `cmd/geocode` support manual HDMI-CEC and metadata experiments. Systemd units live in `linux/`.
 
 ## Build, Test, and Development Commands
 - `go run ./cmd/openframe --config ~/.openframe/config.json` starts the slideshow using your local config.

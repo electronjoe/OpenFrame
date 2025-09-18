@@ -5,14 +5,14 @@
 
 ## 1. Overview
 
-OpenFrame is an open-source photo frame solution that combines hardware (Raspberry Pi 4) and software (written in Go if feasible) to display local photo albums on a Samsung The Frame TV. The solution cycles through multiple albums, merging them into correct chronological order, and provides a set of configuration options via a JSON file. HDMI-CEC is used to control The Frame TV’s power, input selection, and navigation commands from the TV remote.
+OpenFrame is an open-source photo frame solution that combines hardware (Raspberry Pi 4) and software (written in Go if feasible) to display local photo albums on a Samsung The Frame TV. The solution shuffles photos from multiple albums, presents them in a random order, and provides a set of configuration options via a JSON file. HDMI-CEC is used to control The Frame TV’s power, input selection, and navigation commands from the TV remote.
 
 ---
 
 ## 2. Goals and Objectives
 
 1. **Seamless Photo Display**  
-   - Rotate through multiple photo albums in a merged chronological order.  
+   - Shuffle photos from multiple albums into a continuously rotating random stream.  
    - Provide an immersive photo viewing experience on a high-quality display (Samsung The Frame TV).
 
 2. **Highly Configurable**  
@@ -25,7 +25,7 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 
 4. **Low Maintenance & Minimal Interaction**  
    - Automatically power on/off and switch inputs based on user-defined schedules.  
-   - Allow simple user navigation (skip forward/backward by year) via the TV remote through HDMI-CEC.
+   - Allow simple user navigation (skip forward/backward one slide) via the TV remote through HDMI-CEC.
 
 ---
 
@@ -71,9 +71,8 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 
 3. **Photo Display Logic**  
    - Support two or more local photo albums.  
-   - Merge photos chronologically (oldest to newest).  
-     - Must read EXIF data for date/time or rely on file creation timestamps if EXIF is not available.  
-   - Cycle through photos in ascending chronological order.  
+   - Randomize the full photo set before each slideshow run so images surface unpredictably.  
+     - Still read EXIF data for date/time (or fall back to file timestamps) to power overlays and future filtering.  
    - Configurable time interval for each photo display (e.g., 5 seconds to 1 minute).
 
 4. **Configuration Management**  
@@ -101,7 +100,7 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
      - Automatically switch Samsung The Frame TV to the Raspberry Pi’s HDMI input at `onTime`.  
    - **Remote Navigation**:  
      - Listen for directional pad events from The Frame remote.  
-     - When user presses “forward” or “backward” arrow, skip photos by one year forward or backward.  
+     - When user presses “forward” or “backward” arrow, advance to the next or previous slide in the shuffled sequence.  
      - Provide a brief on-screen notification that the skip occurred.
 
 7. **Error Handling & Monitoring**  
@@ -126,14 +125,14 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 
 2. **Daily Operation**  
    1. At `onTime`, Raspberry Pi sends HDMI-CEC command to turn on The Frame TV and switch input.  
-   2. Photos cycle in chronological order. Overlays appear if configured.  
+   2. Photos cycle in a random order. Overlays appear if configured.  
    3. At `offTime`, Raspberry Pi sends HDMI-CEC command to turn off the TV.
 
 3. **Remote Interaction**  
-   1. User picks up The Frame remote, presses forward (→) to skip forward one year of photos.  
-   2. The Golang binary receives the HDMI-CEC event, advances the photo index to the next year’s first photo.  
-   3. Similarly, pressing backward (←) navigates to the previous year’s first photo.  
-   4. On-screen confirmation is displayed (e.g., “Skipping to 2019”).
+   1. User picks up The Frame remote, presses forward (→) to advance to the next slide.  
+   2. The Golang binary receives the HDMI-CEC event, moves to the subsequent photo in the shuffled list.  
+   3. Pressing backward (←) returns to the previously viewed slide.  
+   4. On-screen confirmation is displayed (e.g., “Next photo”).
 
 ---
 
@@ -164,7 +163,7 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 ## 7. Implementation Phases
 
 1. **Phase 1: Core Photo Slideshow**  
-   - Basic Golang application to load photos from directories, read EXIF timestamps, and display them in chronological order on the TV.  
+   - Basic Golang application to load photos from directories, read EXIF timestamps for overlays, and display them in a randomized order on the TV.  
    - Implement JSON config loading and photo indexing.
 
 2. **Phase 2: HDMI-CEC Power & Input Control**  
@@ -173,7 +172,7 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 
 3. **Phase 3: User Interaction via Remote**  
    - Listen to CEC commands for forward/back navigation.  
-   - Implement skip-by-year logic in the slideshow index.
+   - Provide next/previous slide navigation matching the shuffled ordering.
 
 4. **Phase 4: Overlays & Advanced Features**  
    - Add date and location overlays on the displayed image.  
@@ -199,10 +198,10 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 
 ## 9. Open Questions
 
-1. **Skip Granularity**:  
-   - Currently defined as skipping one year with forward/back arrows. Could we allow monthly or decade-based skipping?  
+1. **Navigation Enhancements**:  
+   - Currently defined as single-step skips with forward/back arrows. Could we introduce album-based jumps or favorites?  
 2. **Additional Remote Controls**:  
-   - Could more remote buttons be mapped to other features (e.g., show next/previous photo, jump to oldest/newest)?  
+   - Could more remote buttons be mapped to other features (e.g., pause/resume overlays, jump to oldest/newest)?  
 3. **Cloud Integration**:  
    - Is there an interest in a future iteration that fetches photos from cloud providers (Google Photos, etc.)?  
 4. **Security Features**:  
@@ -212,7 +211,7 @@ OpenFrame is an open-source photo frame solution that combines hardware (Raspber
 
 ## 10. Success Criteria
 
-- **Functional**: System reliably displays photos from multiple albums in chronological order, with optional overlays.  
-- **Usability**: Configuration via JSON is straightforward, and remote interactions for skipping years work seamlessly.  
+- **Functional**: System reliably displays photos from multiple albums in random order, with optional overlays.  
+- **Usability**: Configuration via JSON is straightforward, and manual skip interactions work seamlessly.  
 - **Stability**: The device powers on/off on schedule, and handles large photo libraries without crashing.  
 - **Community Adoption**: The open-source project sees contributions and enhancements from external developers.
