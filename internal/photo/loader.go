@@ -27,7 +27,16 @@ type Photo struct {
 
 // Load walks each album directory, gathering metadata for each image file.
 func Load(albumDirs []string) ([]Photo, error) {
+	cache, err := loadMetadataCache()
+	if err != nil {
+		log.Printf("Warning: could not load metadata cache: %v", err)
+		cache = newMetadataCache()
+	}
+
 	var photos []Photo
+	cacheUpdated := false
+	seenPaths := make(map[string]struct{})
+
 	for _, albumDir := range albumDirs {
 		err := filepath.WalkDir(albumDir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -38,21 +47,44 @@ func Load(albumDirs []string) ([]Photo, error) {
 			if d.IsDir() {
 				return nil
 			}
-			if isImageFile(path) {
-				takenTime, width, height, orientation, err := extractMetadata(path)
-				if err != nil {
-					// Not critical; just log a warning and skip this file
-					log.Printf("Warning: could not extract metadata for %s: %v", path, err)
-					return nil
-				}
-				photos = append(photos, Photo{
-					FilePath:    path,
-					TakenTime:   takenTime,
-					Width:       width,
-					Height:      height,
-					Orientation: orientation,
-				})
+			if !isImageFile(path) {
+				return nil
 			}
+
+			seenPaths[path] = struct{}{}
+
+			info, infoErr := d.Info()
+			if infoErr != nil {
+				info, infoErr = os.Stat(path)
+			}
+			if infoErr != nil {
+				log.Printf("Warning: could not stat %s: %v", path, infoErr)
+				return nil
+			}
+			modTime := info.ModTime()
+
+			if cached, ok := cache.get(path, modTime); ok {
+				photos = append(photos, cached)
+				return nil
+			}
+
+			takenTime, width, height, orientation, err := extractMetadata(path)
+			if err != nil {
+				// Not critical; just log a warning and skip this file
+				log.Printf("Warning: could not extract metadata for %s: %v", path, err)
+				return nil
+			}
+
+			p := Photo{
+				FilePath:    path,
+				TakenTime:   takenTime,
+				Width:       width,
+				Height:      height,
+				Orientation: orientation,
+			}
+			photos = append(photos, p)
+			cache.set(path, modTime, p)
+			cacheUpdated = true
 			return nil
 		})
 		if err != nil {
@@ -60,6 +92,17 @@ func Load(albumDirs []string) ([]Photo, error) {
 			log.Printf("Error walking directory %s: %v", albumDir, err)
 		}
 	}
+
+	if cache.prune(seenPaths) {
+		cacheUpdated = true
+	}
+
+	if cacheUpdated {
+		if err := saveMetadataCache(cache); err != nil {
+			log.Printf("Warning: could not save metadata cache: %v", err)
+		}
+	}
+
 	return photos, nil
 }
 
