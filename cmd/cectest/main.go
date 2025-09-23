@@ -2,11 +2,15 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/electronjoe/OpenFrame/internal/cec"
 )
 
 // Map of common HDMI-CEC user control codes to human-readable names.
@@ -27,6 +31,39 @@ var reUserControlPressed = regexp.MustCompile(`>>\s+([0-9A-Fa-f]{2}):44:([0-9A-F
 var reUserControlReleased = regexp.MustCompile(`>>\s+([0-9A-Fa-f]{2}):45`)
 
 func main() {
+	hdmiInput := flag.Int("hdmi", 2, "HDMI input number to activate before listening (<=0 skips the switch).")
+	skipPower := flag.Bool("skip-power", false, "Skip sending the TV power on command before listening.")
+	powerOnDelay := flag.Duration("power-delay", 10*time.Second, "Delay after powering on the TV before switching inputs.")
+	inputDelay := flag.Duration("input-delay", 5*time.Second, "Delay after switching HDMI inputs before starting cec-client.")
+
+	flag.Parse()
+
+	if !*skipPower {
+		fmt.Println("Sending TV power on command via CEC.")
+		if err := cec.PowerOnTV(); err != nil {
+			log.Printf("PowerOnTV failed: %v", err)
+		} else if *powerOnDelay > 0 {
+			delay := *powerOnDelay
+			fmt.Printf("Waiting %s for the TV to wake up...\n", delay)
+			time.Sleep(delay)
+		}
+	} else {
+		fmt.Println("Skipping TV power on step.")
+	}
+
+	if *hdmiInput > 0 {
+		fmt.Printf("Switching TV to HDMI input %d via CEC.\n", *hdmiInput)
+		if err := cec.SwitchToHDMI(*hdmiInput); err != nil {
+			log.Printf("SwitchToHDMI failed: %v", err)
+		} else if *inputDelay > 0 {
+			delay := *inputDelay
+			fmt.Printf("Waiting %s for the HDMI input to settle...\n", delay)
+			time.Sleep(delay)
+		}
+	} else {
+		fmt.Println("Skipping HDMI input switch step.")
+	}
+
 	fmt.Println("Starting cec-client in traffic mode; listening for user control pressed/released.")
 
 	// cec-client options:
