@@ -18,12 +18,14 @@ Right now I think this assumes the build is in the source repo as `main` binary 
 
 #### Strategy
 
-Instead of letting the Go code decide when to power the TV on/off, we will use **systemd** to:
+Instead of letting the Go code decide when to power the TV on/off, we use **systemd** timers plus a small sync service to:
 
-- **Start** our `openframe.service` (and power on the TV + set HDMI input) at 06:00 (6 AM).  
-- **Stop** our `openframe.service` (and power off the TV) at 20:00 (8 PM).
+- Trigger `openframe-sync.service` at 06:00 and 20:00.
+- The sync service decides whether to start or stop `openframe.service` based on current local time.
+- `openframe.service` contains the CEC pre/post hooks to power on, select HDMI, and power off cleanly.
+  - You can adjust the window by editing `linux/openframe-sync.service` and changing `OPENFRAME_START_HHMM` / `OPENFRAME_STOP_HHMM`.
 
-Once `openframe.service` is running, it can continue its usual slideshow (without worrying about display removal). When systemd *stops* the service at 8 PM, we can run the CEC “standby” command to turn off the TV *after* stopping the Ebiten application—thus avoiding any crashes in Ebiten due to the removal of the active display.
+Because the timers are `Persistent=true`, if the Pi is powered on after a scheduled time, the sync service runs immediately at boot and reconciles the display state appropriately (turn on if during hours, otherwise defensively power off).
 
 #### Why Use systemd Timers?
 
@@ -33,7 +35,7 @@ Once `openframe.service` is running, it can continue its usual slideshow (withou
 ## Enable and Test the Timers
 
 1. **Copy** all the `.service` and `.timer` files to either your user systemd location (`~/.config/systemd/user/`) or the system‐wide location (`/etc/systemd/system/`).  
-2. **Enable** and **start** the timers so they run every day:
+2. **Enable** and **start** the timers so they run every day (and at boot for missed runs):
    ```bash
    # If using user-level systemd:
    systemctl --user daemon-reload
@@ -52,15 +54,17 @@ Once `openframe.service` is running, it can continue its usual slideshow (withou
    systemctl --user status openframe-stop.timer
    ```
 4. Manually test:
-   - You can manually trigger a start (simulating 06:00) via  
+   - Force a reconciliation now (regardless of the clock):
      ```bash
-     systemctl --user start openframe-start.service
-     ```  
-   - Check that the TV turns on and the slideshow appears.  
-   - Then manually trigger a stop (simulating 20:00) via  
+     systemctl --user start openframe-sync.service
+     ```
+   - To simulate “on” hours, temporarily set env vars and run the script directly:
      ```bash
-     systemctl --user start openframe-stop.service
-     ```  
-   - Check that the slideshow stops and the TV turns off.  
+     OPENFRAME_START_HHMM=00:00 OPENFRAME_STOP_HHMM=23:59 bash ~/OpenFrame/linux/openframe-sync.sh
+     ```
+   - To simulate “off” hours:
+     ```bash
+     OPENFRAME_START_HHMM=23:59 OPENFRAME_STOP_HHMM=23:59 bash ~/OpenFrame/linux/openframe-sync.sh
+     ```
 
 Once verified, systemd will automatically do these every day at 06:00 (start) and 20:00 (stop).

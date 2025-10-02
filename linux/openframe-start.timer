@@ -5,7 +5,7 @@ Description=Every day at 06:00, start OpenFrame
 [Timer]
 OnCalendar=*-*-* 06:00:00
 Persistent=true
-Unit=openframe-start.service
+Unit=openframe-sync.service
 
 [Install]
 WantedBy=timers.target

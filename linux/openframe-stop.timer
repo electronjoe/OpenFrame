@@ -5,7 +5,7 @@ Description=Every day at 20:00, stop OpenFrame
 [Timer]
 OnCalendar=*-*-* 20:00:00
 Persistent=true
-Unit=openframe-stop.service
+Unit=openframe-sync.service
 
 [Install]
 WantedBy=timers.target

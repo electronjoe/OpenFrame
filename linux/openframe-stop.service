@@ -6,3 +6,4 @@ Requires=openframe.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/systemctl --user stop openframe.service
+ExecStartPost=/bin/sh -c 'echo "standby 0" | cec-client -s -d 1'

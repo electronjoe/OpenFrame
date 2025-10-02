@@ -1,0 +1,18 @@
+# ~/.config/systemd/user/openframe-sync.service
+[Unit]
+Description=Reconcile OpenFrame state based on time window
+# If you use a full desktop environment, you may need:
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+Environment=OPENFRAME_START_HHMM=06:00
+Environment=OPENFRAME_STOP_HHMM=20:00
+
+# Adjust the path below if your OpenFrame repo lives elsewhere.
+ExecStart=/usr/bin/bash %h/OpenFrame/linux/openframe-sync.sh
+
+[Install]
+WantedBy=default.target
