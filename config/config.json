@@ -1,0 +1,28 @@
+{
+  "albums": [
+    "/home/electronjoe/Downloads/costa_rica_24",
+    "/home/electronjoe/Downloads/2012",
+    "/home/electronjoe/Downloads/2013",
+    "/home/electronjoe/Downloads/2014",
+    "/home/electronjoe/Downloads/2015",
+    "/home/electronjoe/Downloads/2016",
+    "/home/electronjoe/Downloads/2017",
+    "/home/electronjoe/Downloads/2018",
+    "/home/electronjoe/Downloads/2019",
+    "/home/electronjoe/Downloads/2020",
+    "/home/electronjoe/Downloads/2021",
+    "/home/electronjoe/Downloads/2022",
+    "/home/electronjoe/Downloads/2023",
+    "/home/electronjoe/Downloads/2024",
+    "/home/electronjoe/Downloads/knoeller-family-fun-2024-2025"
+  ],
+  "dateOverlay": true,
+  "locationOverlay": false,
+  "schedule": {
+    "onTime": "05:02",
+    "offTime": "05:01"
+  },
+  "interval": 30,
+  "hdmiInput": 2,
+  "randomize": true
+}

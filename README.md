@@ -1,6 +1,41 @@
 # OpenFrame
 
-## Required Config
+## Configuration
+
+### Album Config (`config.json`)
+
+The openframe service reads its configuration from `~/.openframe/config.json` on the CM5. An example config is provided in `config/config.json`:
+
+```json
+{
+  "albums": [
+    "/path/to/album1",
+    "/path/to/album2"
+  ],
+  "dateOverlay": true,
+  "locationOverlay": false,
+  "schedule": {
+    "onTime": "06:00",
+    "offTime": "20:00"
+  },
+  "interval": 30,
+  "hdmiInput": 2,
+  "randomize": true
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `albums` | List of directory paths containing photos |
+| `dateOverlay` | Show photo date on screen |
+| `locationOverlay` | Show photo location on screen |
+| `schedule.onTime` | Time to turn display on (HH:MM) |
+| `schedule.offTime` | Time to turn display off (HH:MM) |
+| `interval` | Seconds between photo transitions |
+| `hdmiInput` | HDMI input number to switch to |
+| `randomize` | Shuffle photo order |
+
+### System Dependencies
 
 I'm certainly missing others... but here is a start.
 
