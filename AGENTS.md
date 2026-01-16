@@ -20,3 +20,9 @@ Current history uses short, sentence-style summaries (e.g., “Frame now turns o
 
 ## System & Deployment Notes
 Install HDMI-CEC dependencies before running (`sudo apt-get install cec-utils`). For scheduled operation, copy the `linux/*.service` and `linux/*.timer` units into your user systemd directory, run `systemctl --user daemon-reload`, then enable the start/stop timers. Keep those instructions in sync whenever CLI flags or config expectations change.
+
+## Monitoring & Debugging
+- `systemctl --user status openframe.service` shows HDMI-CEC pre/post hook success, current slideshow PID, and any warnings emitted by the Go binary.
+- `journalctl --user -u openframe.service -f` tails Ebiten/CEC output; add `--since '10 min ago'` for recent history. Image metadata warnings (e.g. unknown JPEG formats) surface here.
+- `journalctl --user -u openframe-start.service` and `journalctl --user -u openframe-stop.service` confirm the timer wrappers executed and can expose start/stop failures.
+- `systemctl --user list-timers openframe-*` verifies the daily 06:00 start and 20:00 stop schedule, including catch-up runs thanks to `Persistent=true`.

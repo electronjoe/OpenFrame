@@ -5,6 +5,7 @@ go 1.22.0
 toolchain go1.22.10
 
 require (
+	github.com/gvalkov/golang-evdev v0.0.0-20220815104727-7e27d6ce89b6
 	github.com/hajimehoshi/ebiten/v2 v2.8.6
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	golang.org/x/image v0.20.0
